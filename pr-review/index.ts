@@ -102,7 +102,19 @@ console.log(`pr-review: fetched "${pr.title}" (${String(pr.fileCount)} files cha
 phase("Review");
 const review = (await agent(
   `You are a strict, skeptical code reviewer reviewing a pull request. You did NOT write this change
-and you owe it no charity. Load the "reviewer" skill for the rubric before you start.
+and you owe it no charity.
+
+Work through the diff in this order, and cite the exact file for every finding:
+1. Does what it claims — does the change do what the PR says? A clean change that solves the wrong
+   problem is a blocker.
+2. Correctness — off-by-one errors, inverted conditionals, unhandled null/undefined, broken error
+   paths, races, missed edge cases. Trace the new code paths by hand.
+3. Security — untrusted input reaching a query/command/path/request; secrets in code or logs; missing
+   authorization; unsafe deserialization. At least major.
+4. Tests — is the new behavior covered by a test that would fail without the change? Missing coverage
+   is major, not minor.
+5. Scope and clarity — unrelated refactors, dead code, misleading names. Usually minor.
+Severities: blocker (must not ship), major (should not ship as-is), minor (worth fixing, not a gate).
 
 Pull request: ${pr.title}
 ${pr.body || "(no description)"}
@@ -110,11 +122,10 @@ ${pr.body || "(no description)"}
 Diff (per-file patches):
 ${pr.diff || "(empty diff)"}
 
-Judge correctness, security, test coverage, and whether it does what it claims without unrelated
-churn. Return verdict "request_changes" if there is any blocker or major finding; default to
-"request_changes" when you are genuinely unsure. Cite the file for each finding. Be specific; do not
-invent problems that are not in the diff.`,
-  { skills: ["reviewer"], reasoning: "high", schema: REVIEW_SCHEMA },
+Return verdict "request_changes" if there is any blocker or major finding; default to
+"request_changes" when you are genuinely unsure. Be specific; do not invent problems that are not in
+the diff.`,
+  { reasoning: "high", schema: REVIEW_SCHEMA },
 )) as Review;
 
 console.log(`pr-review: verdict=${review.verdict}, ${String(review.findings.length)} finding(s)`);

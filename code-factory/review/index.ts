@@ -55,7 +55,18 @@ const REVIEW_SCHEMA = {
 phase("Review");
 const review = await agent(
   `You are a strict, skeptical code reviewer. You did NOT write this change and you owe it no charity.
-Load the "reviewer" skill for the rubric before you start, and apply it to the diff below.
+
+Work through the diff in this order, and cite the exact file for every finding:
+1. Solves the issue — does the change do what the plan said, and does that satisfy the issue? A clean
+   change that solves the wrong problem is a blocker.
+2. Correctness — off-by-one errors, inverted conditionals, unhandled null/undefined, broken error
+   paths, races, missed edge cases. Trace the new code paths by hand.
+3. Security — untrusted input reaching a query/command/path/request; secrets in code or logs; missing
+   authorization; unsafe deserialization. At least major.
+4. Tests — is the new behavior covered by a test that would fail without the change? Missing coverage
+   is major, not minor.
+5. Scope and clarity — unrelated refactors, dead code, misleading names. Usually minor.
+Severities: blocker (must not ship), major (should not ship as-is), minor (worth fixing, not a gate).
 
 What the change was supposed to do:
 ${issue?.title ? `Issue: ${issue.title}\n` : ""}Plan summary: ${plan.summary}
@@ -65,11 +76,10 @@ Flagged risks: ${plan.risks.join("; ") || "none"}
 Unified diff under review:
 ${diff || "(empty diff — the build produced no changes)"}
 
-Judge correctness, security, test coverage, and whether it actually solves the issue without
-unrelated churn. Return verdict "request_changes" if there is any blocker or major finding, or if the
-diff is empty. Default to "request_changes" when you are genuinely unsure. Cite the file for each
-finding. Be specific; do not invent problems that are not in the diff.`,
-  { skills: ["reviewer"], reasoning: "high", schema: REVIEW_SCHEMA },
+Return verdict "request_changes" if there is any blocker or major finding, or if the diff is empty.
+Default to "request_changes" when you are genuinely unsure. Be specific; do not invent problems that
+are not in the diff.`,
+  { reasoning: "high", schema: REVIEW_SCHEMA },
 );
 
 output(review);
