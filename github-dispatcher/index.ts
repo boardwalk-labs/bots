@@ -10,6 +10,7 @@
 // the delivery and dispatches.
 
 import { input, output, workflows, type WorkflowMeta } from "@boardwalk-labs/workflow";
+import { routeForEvent, type GitHubEvent } from "./routing.js";
 
 export const meta = {
   slug: "github-dispatcher",
@@ -18,29 +19,6 @@ export const meta = {
   triggers: [{ kind: "webhook", auth: "token" }],
   budget: { max_duration_seconds: 60 },
 } satisfies WorkflowMeta;
-
-interface GitHubEvent {
-  action?: string;
-  issue?: { number?: number };
-  pull_request?: { number?: number };
-  repository?: { full_name?: string };
-}
-
-// Each route: a predicate over the GitHub event body -> the slug of the workflow that handles it.
-// The first matching route wins. To add the PR reviewer, build a `pr-review` workflow and uncomment.
-const ROUTES: { label: string; slug: string; match: (e: GitHubEvent) => boolean }[] = [
-  {
-    label: "issue -> code-factory",
-    slug: "code-factory",
-    match: (e) => e.issue !== undefined && ["opened", "reopened", "labeled"].includes(e.action ?? ""),
-  },
-  {
-    // opened = new PR; synchronize = a new commit pushed to the PR; reopened.
-    label: "pull_request -> pr-review",
-    slug: "pr-review",
-    match: (e) => e.pull_request !== undefined && ["opened", "reopened", "synchronize"].includes(e.action ?? ""),
-  },
-];
 
 const e = input as GitHubEvent;
 const repo = e.repository?.full_name ?? "(unknown repo)";
@@ -51,7 +29,7 @@ if (kind === "other") {
   console.log(`github-dispatcher: unrecognized payload, top-level keys=[${Object.keys(e).join(", ")}]`);
 }
 
-const route = ROUTES.find((r) => r.match(e));
+const route = routeForEvent(e);
 if (route) {
   const runId = await workflows.run(route.slug, e); // fire-and-forget; returns the new run's id
   console.log(`github-dispatcher: routed ${kind} -> ${route.slug} (run ${runId})`);
