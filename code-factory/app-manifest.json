@@ -1,0 +1,16 @@
+{
+  "name": "boardwalk-code-factory",
+  "url": "https://github.com/boardwalk-labs/bots/tree/main/code-factory",
+  "public": false,
+  "default_permissions": {
+    "contents": "write",
+    "pull_requests": "write",
+    "issues": "write",
+    "metadata": "read"
+  },
+  "default_events": ["issues"],
+  "hook_attributes": {
+    "url": "https://REPLACE-WITH-YOUR-code-factory-WEBHOOK-URL",
+    "active": true
+  }
+}

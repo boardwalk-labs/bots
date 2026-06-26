@@ -1,0 +1,8 @@
+{
+  "name": "code-factory-plan",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@boardwalk-labs/workflow": "^0.1.0"
+  }
+}
