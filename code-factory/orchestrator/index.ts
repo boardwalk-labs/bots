@@ -79,24 +79,28 @@ if (t.action !== undefined && !ACTIONABLE.has(t.action)) {
 
 async function runFactory(): Promise<void> {
   // ── Intake: the issue and a shallow file tree (so the planner is grounded without a clone) ──────
+  // All of this is nondeterministic I/O (a freshly minted token + GitHub fetches). The orchestrator
+  // SUSPENDS at each workflows.call below and REPLAYS from the top on resume, so it must run inside
+  // ONE journaled step.run — otherwise the recomputed plan arguments diverge from the journal. The
+  // token value stays inside the closure and never enters the journal.
   phase("Intake");
-  const intakeToken = await installationToken(repo as string);
-  const issueData = await step.run("fetch-issue", async () => {
-    const raw = (await gh(`/repos/${repo}/issues/${String(issueNumber)}`, intakeToken)) as {
+  const intake = await step.run("intake", async () => {
+    const token = await installationToken(repo as string);
+    const raw = (await gh(`/repos/${repo}/issues/${String(issueNumber)}`, token)) as {
       title: string;
       body: string | null;
     };
-    return { title: raw.title, body: raw.body ?? "" };
-  });
-  const tree = await step.run("fetch-tree", async () => {
-    const br = (await gh(`/repos/${repo}/branches/${base}`, intakeToken)) as {
+    const br = (await gh(`/repos/${repo}/branches/${base}`, token)) as {
       commit: { commit: { tree: { sha: string } } };
     };
-    const data = (await gh(`/repos/${repo}/git/trees/${br.commit.commit.tree.sha}?recursive=1`, intakeToken)) as {
+    const data = (await gh(`/repos/${repo}/git/trees/${br.commit.commit.tree.sha}?recursive=1`, token)) as {
       tree: { path: string; type: string }[];
     };
-    return data.tree.filter((n) => n.type === "blob").map((n) => n.path).slice(0, 300);
+    const tree = data.tree.filter((n) => n.type === "blob").map((n) => n.path).slice(0, 300);
+    return { issue: { title: raw.title, body: raw.body ?? "" }, tree };
   });
+  const issueData = intake.issue;
+  const tree = intake.tree;
 
   // ── Plan ──────────────────────────────────────────────────────────────────────────────────────
   phase("Plan");
@@ -143,21 +147,22 @@ async function runFactory(): Promise<void> {
 
     if (gate.value === "Approve & open PR") {
       phase("Ship");
-      const shipToken = await installationToken(repo as string);
-      prUrl = await step.run(`open-pr-${String(humanRounds)}`, () =>
-        openOrGetPr(shipToken, {
+      // Mint the token + open the PR + comment inside ONE journaled step.run: no bare token on the
+      // replay path, and the token value never enters the journal.
+      prUrl = await step.run(`ship-${String(humanRounds)}`, async () => {
+        const token = await installationToken(repo as string);
+        const url = await openOrGetPr(token, {
           title: `${issueData.title} (closes #${String(issueNumber)})`,
           head: branch,
           base,
           body: prBody(issueNumber as number, plan.summary, review, buildResult),
-        }),
-      );
-      await step.run(`comment-${String(humanRounds)}`, () =>
-        gh(`/repos/${repo}/issues/${String(issueNumber)}/comments`, shipToken, {
+        });
+        await gh(`/repos/${repo}/issues/${String(issueNumber)}/comments`, token, {
           method: "POST",
-          body: JSON.stringify({ body: `The code factory opened a PR: ${prUrl ?? ""}` }),
-        }),
-      );
+          body: JSON.stringify({ body: `The code factory opened a PR: ${url}` }),
+        });
+        return url;
+      });
       finalStatus = "pr-opened";
       console.log(`code-factory: opened PR ${prUrl ?? "?"} for ${repo}#${String(issueNumber)}`);
       break;
