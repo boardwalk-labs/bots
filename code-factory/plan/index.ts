@@ -1,40 +1,38 @@
 // code-factory-plan — the planning station.
 //
-// Given the issue text and a shallow file tree of the repo, produce a concrete implementation plan:
-// which files to touch, the approach, and the exact command that proves the change works. It writes
-// no code and clones nothing; it turns a request into a buildable spec. Keeping this separate from
-// the build station means the plan is a durable, inspectable artifact a person can read before any
-// code is written, and it can be re-run on its own.
+// It fetches the issue and a shallow file tree itself (rather than receiving them from the
+// orchestrator) so the orchestrator's call to this workflow carries only immutable, trigger-derived
+// arguments. That keeps the orchestrator deterministic across the suspend/resume cycles it goes
+// through while waiting on its child workflows. It returns the issue it fetched alongside the plan,
+// so the orchestrator can reuse it downstream without fetching anything itself.
 
 import { phase, agent, input, output, type WorkflowMeta } from "@boardwalk-labs/workflow";
+import { gh, installationToken } from "./github.js";
 
 export const meta = {
   slug: "code-factory-plan",
   title: "Code Factory · Plan",
-  description: "Turn a GitHub issue + repo file tree into a concrete implementation plan.",
+  description: "Fetch a GitHub issue + repo file tree and turn them into a concrete implementation plan.",
   triggers: [{ kind: "manual" }],
   input_schema: {
     type: "object",
     properties: {
       repo: { type: "string" },
-      issue: {
-        type: "object",
-        properties: { title: { type: "string" }, body: { type: "string" } },
-        required: ["title", "body"],
-      },
-      tree: { type: "array", items: { type: "string" }, description: "Repo file paths." },
+      issue_number: { type: "integer", minimum: 1 },
+      base: { type: "string", default: "main" },
     },
-    required: ["repo", "issue", "tree"],
+    required: ["repo", "issue_number"],
   },
+  permissions: { secrets: [{ name: "GITHUB_APP_PRIVATE_KEY" }] },
   budget: { max_usd: 1 },
 } satisfies WorkflowMeta;
 
 interface PlanInput {
   repo: string;
-  issue: { title: string; body: string };
-  tree: string[];
+  issue_number: number;
+  base?: string;
 }
-const { repo, issue, tree } = input as PlanInput;
+const { repo, issue_number, base = "main" } = input as PlanInput;
 
 const PLAN_SCHEMA = {
   type: "object",
@@ -51,8 +49,32 @@ const PLAN_SCHEMA = {
   required: ["summary", "files_to_touch", "approach", "test_command", "risks"],
 } as const;
 
+interface PlanResult {
+  summary: string;
+  files_to_touch: string[];
+  approach: string;
+  test_command: string;
+  risks: string[];
+}
+
+// ── Fetch the issue and a shallow file tree (the planner's own grounding) ────────────────────────
+phase("Fetch");
+const token = await installationToken(repo);
+const raw = (await gh(`/repos/${repo}/issues/${String(issue_number)}`, token)) as {
+  title: string;
+  body: string | null;
+};
+const issue = { title: raw.title, body: raw.body ?? "" };
+const br = (await gh(`/repos/${repo}/branches/${base}`, token)) as {
+  commit: { commit: { tree: { sha: string } } };
+};
+const data = (await gh(`/repos/${repo}/git/trees/${br.commit.commit.tree.sha}?recursive=1`, token)) as {
+  tree: { path: string; type: string }[];
+};
+const tree = data.tree.filter((n) => n.type === "blob").map((n) => n.path).slice(0, 300);
+
 phase("Plan");
-const plan = await agent(
+const plan = (await agent(
   `You are a staff engineer scoping a change before anyone writes code.
 
 Repository: ${repo}
@@ -69,6 +91,7 @@ files when there is no home for the change). Infer the project's test command fr
 (package.json scripts, a Makefile, pytest layout, go test, etc.) and give the exact command. Keep the
 change minimal and focused on the issue; do not propose unrelated refactors.`,
   { reasoning: "high", schema: PLAN_SCHEMA },
-);
+)) as PlanResult;
 
-output(plan);
+// Return the issue alongside the plan so the orchestrator never has to fetch it itself.
+output({ ...plan, issue });

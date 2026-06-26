@@ -79,32 +79,15 @@ if (t.action !== undefined && !ACTIONABLE.has(t.action)) {
 
 async function runFactory(): Promise<void> {
   // ── Intake: the issue and a shallow file tree (so the planner is grounded without a clone) ──────
-  // All of this is nondeterministic I/O (a freshly minted token + GitHub fetches). The orchestrator
-  // SUSPENDS at each workflows.call below and REPLAYS from the top on resume, so it must run inside
-  // ONE journaled step.run — otherwise the recomputed plan arguments diverge from the journal. The
-  // token value stays inside the closure and never enters the journal.
-  phase("Intake");
-  const intake = await step.run("intake", async () => {
-    const token = await installationToken(repo as string);
-    const raw = (await gh(`/repos/${repo}/issues/${String(issueNumber)}`, token)) as {
-      title: string;
-      body: string | null;
-    };
-    const br = (await gh(`/repos/${repo}/branches/${base}`, token)) as {
-      commit: { commit: { tree: { sha: string } } };
-    };
-    const data = (await gh(`/repos/${repo}/git/trees/${br.commit.commit.tree.sha}?recursive=1`, token)) as {
-      tree: { path: string; type: string }[];
-    };
-    const tree = data.tree.filter((n) => n.type === "blob").map((n) => n.path).slice(0, 300);
-    return { issue: { title: raw.title, body: raw.body ?? "" }, tree };
-  });
-  const issueData = intake.issue;
-  const tree = intake.tree;
-
   // ── Plan ──────────────────────────────────────────────────────────────────────────────────────
+  // The orchestrator SUSPENDS at each workflows.call (child-wait release) and REPLAYS from the top on
+  // resume, so a call's arguments must be deterministic: derived ONLY from the immutable trigger
+  // `input` or from prior journaled seam results, never from freshly fetched data. So we pass just
+  // { repo, issue_number, base } here; the planner fetches the issue + tree itself and returns the
+  // issue for us to reuse downstream (no orchestrator-side GitHub reads on the suspend path).
   phase("Plan");
-  const plan = asPlan(await workflows.call("code-factory-plan", { repo, issue: issueData, tree }));
+  const plan = asPlan(await workflows.call("code-factory-plan", { repo, issue_number: issueNumber, base }));
+  const issueData = plan.issue;
   console.log(`code-factory: plan ready — ${String(plan.files_to_touch.length)} file(s), test: ${plan.test_command}`);
 
   // ── Build, then skeptical review; auto-revise a bounded number of times ─────────────────────────
@@ -229,6 +212,7 @@ interface Plan {
   approach: string;
   test_command: string;
   risks: string[];
+  issue: { title: string; body: string };
 }
 interface BuildResult {
   branch: string;
@@ -245,7 +229,12 @@ interface Review {
 
 function asPlan(v: unknown): Plan {
   const o = v as Partial<Plan>;
-  if (typeof o.summary !== "string" || typeof o.test_command !== "string" || !Array.isArray(o.files_to_touch)) {
+  if (
+    typeof o.summary !== "string" ||
+    typeof o.test_command !== "string" ||
+    !Array.isArray(o.files_to_touch) ||
+    o.issue === undefined
+  ) {
     throw new Error(`code-factory-plan returned an unexpected shape: ${JSON.stringify(v).slice(0, 400)}`);
   }
   return {
@@ -254,6 +243,7 @@ function asPlan(v: unknown): Plan {
     approach: o.approach ?? "",
     test_command: o.test_command,
     risks: o.risks ?? [],
+    issue: o.issue,
   };
 }
 function asBuild(v: unknown): BuildResult {
