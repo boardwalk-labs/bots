@@ -34,11 +34,12 @@ const ROUTES: { label: string; slug: string; match: (e: GitHubEvent) => boolean 
     slug: "code-factory",
     match: (e) => e.issue !== undefined && ["opened", "reopened", "labeled"].includes(e.action ?? ""),
   },
-  // {
-  //   label: "pull_request -> pr-review",
-  //   slug: "pr-review",
-  //   match: (e) => e.pull_request !== undefined && ["opened", "reopened", "synchronize"].includes(e.action ?? ""),
-  // },
+  {
+    // opened = new PR; synchronize = a new commit pushed to the PR; reopened.
+    label: "pull_request -> pr-review",
+    slug: "pr-review",
+    match: (e) => e.pull_request !== undefined && ["opened", "reopened", "synchronize"].includes(e.action ?? ""),
+  },
 ];
 
 const e = input as GitHubEvent;
