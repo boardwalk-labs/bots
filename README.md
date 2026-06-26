@@ -14,6 +14,14 @@ repo is the finished product: bots you can deploy and install.
 | [`code-factory`](./code-factory) | Turns a GitHub issue into a reviewed, tested pull request | GitHub issues |
 | `slack-assistant` | (planned) Answers questions in Slack from your own context | Slack messages |
 
+### The GitHub front door
+
+A GitHub App has a single webhook URL, and every event it subscribes to is delivered there. So
+[`github-dispatcher`](./github-dispatcher) is the one place the App's webhook points: it reads each
+delivery and routes it to the workflow that handles it (issues to `code-factory` today, pull requests
+to a reviewer later) via `workflows.run`. Adding a GitHub bot is one new entry in its `ROUTES`. Point
+the App at the dispatcher's webhook URL, not at any individual bot.
+
 ## How a bot is laid out
 
 A bot is a folder. Inside it, each workflow is a self-contained, separately deployable package (its
