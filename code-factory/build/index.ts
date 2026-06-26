@@ -168,10 +168,7 @@ Steps:
 Do NOT run the test command, package installs, or any build yourself — the surrounding program runs
 \`${plan.test_command}\` after you finish, and version control is handled for you. Keep your tool use
 focused: read only what you need, make the edit, then stop (you have a limited tool budget). Do not
-run git, push, or any network/auth commands.
-
-Be economical with your tool calls: the plan already names the files to touch, so read those and only
-the files they directly import — do NOT grep or read the rest of the repo, and do not use web search.`,
+run git, push, or any network/auth commands.`,
   { builtins: "all", reasoning: "high" },
 );
 
@@ -209,7 +206,8 @@ const result = await step.run("commit-and-push", async () => {
   // here: we own the code-factory/* branch namespace and regenerate it from base on every round, and
   // an explicit-URL push has no remote-tracking ref for --force-with-lease to lease against.
   await run("git", ["-C", DIR, "push", "--force", authUrl, `HEAD:${branch}`], { maxBuffer: 32 * 1024 * 1024 });
-  return { branch, diff: diff.slice(0, 60_000), files_changed: names, pushed: true };
+  // The reviewer must see the WHOLE change — this cap is only a guardrail against a pathological diff.
+  return { branch, diff: diff.slice(0, 400_000), files_changed: names, pushed: true };
 });
 console.log(
   result.pushed
