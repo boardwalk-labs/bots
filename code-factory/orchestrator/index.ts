@@ -21,9 +21,11 @@ export const meta = {
   slug: "code-factory",
   title: "Code Factory",
   description: "Turn a GitHub issue into a reviewed, tested pull request, with a human approval gate.",
-  // manual: pass { repo, issue_number }. webhook: point the GitHub App's `issues` webhook here; the
-  // body's repository.full_name + issue.number are read below, so both paths converge.
-  triggers: [{ kind: "manual" }, { kind: "webhook", auth: "token" }],
+  // Triggered by github-dispatcher via workflows.run (the manual/workflow trigger path), or run
+  // manually with { repo, issue_number }. The dispatcher is the GitHub App's webhook entry, not this
+  // workflow, so there is no webhook trigger here. The body shape is the same either way (it reads
+  // repository.full_name + issue.number below).
+  triggers: [{ kind: "manual" }],
   input_schema: {
     type: "object",
     properties: {

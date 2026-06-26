@@ -72,11 +72,13 @@ from the App's id + private key; the secret never reaches an agent (see `orchest
 
 ### Webhook auth, honestly
 
-GitHub signs webhook deliveries with an HMAC (`X-Hub-Signature-256`). Boardwalk's native GitHub
-signature verification is still on the roadmap, so today you wire the App's webhook to this bot's
-**webhook trigger URL** (which carries an unguessable token, `auth: "token"`). The orchestrator reads
-`repository.full_name` + `issue.number` straight off the GitHub body and only acts on the `opened`,
-`reopened`, and `labeled` actions. Until then, you can also just trigger it manually (below).
+The GitHub App's webhook points at the [`github-dispatcher`](../github-dispatcher) workflow, not at
+`code-factory` directly. The dispatcher routes each `issues` delivery to `code-factory` via
+`workflows.run` (acting on the `opened`, `reopened`, and `labeled` actions), so `code-factory` only
+needs a `manual` trigger. GitHub signs deliveries with an HMAC (`X-Hub-Signature-256`), but
+Boardwalk's native GitHub signature verification is still on the roadmap, so the dispatcher's webhook
+URL carries an unguessable token (`auth: "token"`) instead. You can also trigger `code-factory`
+manually (below).
 
 ## Deploy
 
@@ -89,8 +91,8 @@ boardwalk deploy ./review/index.ts         # bundles skills/ alongside index.ts
 boardwalk deploy ./orchestrator/index.ts   # bundles its github.ts helper
 ```
 
-After deploying, copy the `code-factory` workflow's webhook URL into the GitHub App's webhook
-settings.
+After deploying, copy the `github-dispatcher` webhook URL (`boardwalk webhook github-dispatcher
+--rotate`) into the GitHub App's webhook settings.
 
 ## Run
 
