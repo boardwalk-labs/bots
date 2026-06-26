@@ -67,6 +67,7 @@ async function git(args: string[]): Promise<string> {
 }
 
 // ── Clone the base and cut the work branch (token used only here, then scrubbed from the remote) ──
+console.log(`code-factory-build: cloning ${repo}@${base} -> ${branch}${feedback !== undefined ? " (revision)" : ""}`);
 phase("Clone");
 await step.run("clone", async () => {
   await run("rm", ["-rf", DIR]);
@@ -123,6 +124,7 @@ const testRun = await step.run("run-tests", async () => {
     return { passed: false, output: tail((e.stdout ?? "") + (e.stderr ?? "") + (e.message ?? "")) };
   }
 });
+console.log(`code-factory-build: tests ${testRun.passed ? "passed" : "failed"}`);
 
 // ── Commit, force-push the branch, and report the diff back to the orchestrator ──────────────────
 phase("Push");
@@ -142,6 +144,11 @@ const result = await step.run("commit-and-push", async () => {
   await run("git", ["-C", DIR, "push", "--force", authUrl, `HEAD:${branch}`], { maxBuffer: 32 * 1024 * 1024 });
   return { branch, diff: diff.slice(0, 200_000), files_changed: names, pushed: true };
 });
+console.log(
+  result.pushed
+    ? `code-factory-build: pushed ${String(result.files_changed.length)} file(s) to ${branch}`
+    : `code-factory-build: no changes to push`,
+);
 
 output({
   branch: result.branch,

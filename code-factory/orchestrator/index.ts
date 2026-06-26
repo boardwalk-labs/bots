@@ -70,8 +70,10 @@ const branch = `code-factory/issue-${String(issueNumber)}`;
 // Webhook deliveries fire on every issue action; only act on the ones that mean "new work".
 const ACTIONABLE = new Set(["opened", "reopened", "labeled"]);
 if (t.action !== undefined && !ACTIONABLE.has(t.action)) {
+  console.log(`code-factory: skipping issue action "${t.action}" for ${repo}#${String(issueNumber)}`);
   output({ status: "skipped", reason: `ignoring issue action "${t.action}"`, repo, issue_number: issueNumber });
 } else {
+  console.log(`code-factory: starting for ${repo}#${String(issueNumber)} -> branch ${branch}`);
   await runFactory();
 }
 
@@ -99,15 +101,18 @@ async function runFactory(): Promise<void> {
   // ── Plan ──────────────────────────────────────────────────────────────────────────────────────
   phase("Plan");
   const plan = asPlan(await workflows.call("code-factory-plan", { repo, issue: issueData, tree }));
+  console.log(`code-factory: plan ready — ${String(plan.files_to_touch.length)} file(s), test: ${plan.test_command}`);
 
   // ── Build, then skeptical review; auto-revise a bounded number of times ─────────────────────────
   phase("Build");
   let buildResult = asBuild(
     await workflows.call("code-factory-build", { repo, base, branch, plan, issue: issueData }),
   );
+  console.log(`code-factory: build done — ${String(buildResult.files_changed.length)} file(s) changed, tests ${buildResult.tests_passed ? "passed" : "failed"}`);
 
   phase("Review");
   let review = asReview(await workflows.call("code-factory-review", { diff: buildResult.diff, plan, issue: issueData }));
+  console.log(`code-factory: review verdict=${review.verdict} (${String(review.findings.length)} finding(s))`);
 
   let autoRounds = 0;
   while (review.verdict === "request_changes" && autoRounds < MAX_AUTO_REVISIONS) {
@@ -129,6 +134,7 @@ async function runFactory(): Promise<void> {
   let prUrl: string | null = null;
 
   for (;;) {
+    console.log(`code-factory: awaiting human approval for ${repo}#${String(issueNumber)} (round ${String(humanRounds)})`);
     const gate = await humanInput({
       key: `approve-${String(issueNumber)}-${String(humanRounds)}`,
       prompt: renderGateSummary(issueData.title, plan.summary, buildResult, review),
@@ -153,11 +159,13 @@ async function runFactory(): Promise<void> {
         }),
       );
       finalStatus = "pr-opened";
+      console.log(`code-factory: opened PR ${prUrl ?? "?"} for ${repo}#${String(issueNumber)}`);
       break;
     }
 
     if (gate.value === "Reject" || humanRounds >= MAX_HUMAN_REVISIONS) {
       finalStatus = gate.value === "Reject" ? "rejected" : "abandoned";
+      console.log(`code-factory: ${finalStatus} for ${repo}#${String(issueNumber)}`);
       break;
     }
 

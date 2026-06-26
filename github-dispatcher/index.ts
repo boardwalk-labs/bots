@@ -44,11 +44,19 @@ const ROUTES: { label: string; slug: string; match: (e: GitHubEvent) => boolean 
 
 const e = input as GitHubEvent;
 const repo = e.repository?.full_name ?? "(unknown repo)";
-const route = ROUTES.find((r) => r.match(e));
+const kind = e.issue !== undefined ? "issue" : e.pull_request !== undefined ? "pull_request" : "other";
+console.log(`github-dispatcher: received ${kind} event (action=${e.action ?? "?"}, repo=${repo})`);
+if (kind === "other") {
+  // Tells apart ping / installation / unrelated deliveries when nothing routes.
+  console.log(`github-dispatcher: unrecognized payload, top-level keys=[${Object.keys(e).join(", ")}]`);
+}
 
+const route = ROUTES.find((r) => r.match(e));
 if (route) {
   const runId = await workflows.run(route.slug, e); // fire-and-forget; returns the new run's id
+  console.log(`github-dispatcher: routed ${kind} -> ${route.slug} (run ${runId})`);
   output({ routed_to: route.slug, run_id: runId, action: e.action ?? null, repo });
 } else {
+  console.log(`github-dispatcher: no matching route (${kind}, action=${e.action ?? "?"})`);
   output({ routed_to: null, reason: `no route for action "${e.action ?? "?"}"`, repo });
 }

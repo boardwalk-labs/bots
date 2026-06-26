@@ -40,6 +40,7 @@ interface PrEvent {
   repo?: string;
   pr_number?: number;
   number?: number;
+  action?: string;
   pull_request?: { number?: number };
   repository?: { full_name?: string };
 }
@@ -77,6 +78,7 @@ interface Review {
   findings: { severity: "blocker" | "major" | "minor"; file: string; note: string }[];
 }
 
+console.log(`pr-review: reviewing ${repo}#${String(prNumber)} (action=${ev.action ?? "manual"})`);
 const token = await installationToken(repo);
 
 // ── Fetch the PR metadata and its per-file patches (assembled into a diff) ───────────────────────
@@ -94,6 +96,7 @@ const pr = await step.run("fetch-pr", async () => {
     .slice(0, 200_000);
   return { title: head.title, body: head.body ?? "", diff, fileCount: files.length };
 });
+console.log(`pr-review: fetched "${pr.title}" (${String(pr.fileCount)} files changed)`);
 
 // ── Review: a skeptical reviewer over the diff (the same rubric as code-factory's checker) ────────
 phase("Review");
@@ -114,6 +117,8 @@ invent problems that are not in the diff.`,
   { skills: ["reviewer"], reasoning: "high", schema: REVIEW_SCHEMA },
 )) as Review;
 
+console.log(`pr-review: verdict=${review.verdict}, ${String(review.findings.length)} finding(s)`);
+
 // ── Post the review back to the PR ───────────────────────────────────────────────────────────────
 phase("Post");
 await step.run("post-review", () =>
@@ -122,6 +127,7 @@ await step.run("post-review", () =>
     body: JSON.stringify({ event: EVENT, body: reviewBody(review) }),
   }),
 );
+console.log(`pr-review: posted ${EVENT} review on ${repo}#${String(prNumber)}`);
 
 output({
   repo,
