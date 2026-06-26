@@ -1,8 +1,8 @@
 // GitHub App auth for the trusted program layer: mint a short-lived installation token from the
-// app's id + private key, plus a thin REST helper. The credentials live only here (secrets.get),
-// never in an agent's prompt or tools.
+// app's id + private key, plus a thin REST helper. The credentials live only here (secrets.get +
+// process.env), never in an agent's prompt or tools.
 //
-// This file is intentionally duplicated in each deployable package (orchestrator, build) so every
+// This file is intentionally duplicated in each deployable package that talks to GitHub so every
 // package stays self-contained and bundles cleanly. Keep the copies in sync.
 
 import { createSign } from "node:crypto";
@@ -29,17 +29,15 @@ export async function gh(path: string, token: string, init?: RequestInit): Promi
 }
 
 // Mint an installation access token scoped to `repo` ("owner/name"). It is short-lived (about an
-// hour), so mint it fresh right before you need it rather than memoizing it; that way a run that
-// suspends (a human gate) and resumes hours later never replays an expired token.
+// hour), so mint it fresh right before you need it rather than memoizing it.
 export async function installationToken(repo: string): Promise<string> {
-  // GITHUB_APP_ID is a non-secret environment variable (injected from the run's environment, e.g.
-  // "open-source"); only the private key is a secret.
+  // GITHUB_APP_ID is a non-secret environment variable (injected from the run's environment); only
+  // the private key is a secret. The key is used verbatim — store it as a valid PEM.
   const appId = process.env.GITHUB_APP_ID;
   if (appId === undefined || appId === "") {
-    throw new Error("GITHUB_APP_ID is not set — expected as an environment variable (e.g. in the 'open-source' environment).");
+    throw new Error("GITHUB_APP_ID is not set — expected as an environment variable in the run's environment.");
   }
-  const pem = (await secrets.get("GITHUB_APP_PRIVATE_KEY")).replace(/\\n/g, "\n");
-  const jwt = appJwt(appId, pem);
+  const jwt = appJwt(appId, await secrets.get("GITHUB_APP_PRIVATE_KEY"));
   const install = (await gh(`/repos/${repo}/installation`, jwt)) as { id: number };
   const token = (await gh(`/app/installations/${String(install.id)}/access_tokens`, jwt, {
     method: "POST",
