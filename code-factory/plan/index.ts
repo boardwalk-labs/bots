@@ -42,7 +42,7 @@ const PLAN_SCHEMA = {
     approach: { type: "string", description: "The implementation approach, in a few sentences." },
     test_command: {
       type: "string",
-      description: "The single SELF-CONTAINED shell command that proves the change works, run in a FRESH clone with NO dependencies installed. It MUST install dependencies first, e.g. `npm install && npm test`, or `cd pkg && npm install && npx tsc --noEmit`, or `pip install -r requirements.txt && pytest -q`. cd into the right package when deps are per-package.",
+      description: "The single shell command that proves the change works, e.g. `npm test`, `cd pkg && npx tsc --noEmit`, or `pytest -q`. Dependencies are ALREADY installed before this runs, so do NOT include an install step — just run the test/typecheck (cd into the right package if needed).",
     },
     risks: { type: "array", items: { type: "string" }, description: "What could go wrong or break." },
   },
@@ -88,10 +88,9 @@ ${tree.join("\n")}
 
 Produce a tight, buildable plan. Name the SPECIFIC files to touch (reuse existing ones; only add
 files when there is no home for the change). Infer the project's test command from the tree
-(package.json scripts, a Makefile, pytest layout, go test, etc.). The test command runs in a FRESH
-clone with NOTHING installed, so it MUST be self-contained — include the dependency install step
-(\`npm install\`, \`pip install\`, etc.) before the test/typecheck, cd-ing into the right package
-first when dependencies are per-package. Keep the change minimal and focused on the issue; do not
+(package.json scripts, a Makefile, pytest layout, go test, etc.). Dependencies are installed for you
+before the test runs, so the command should just run the test/typecheck (no install step), cd-ing
+into the right package first if needed. Keep the change minimal and focused on the issue; do not
 propose unrelated refactors.`,
   { reasoning: "high", schema: PLAN_SCHEMA },
 )) as PlanResult;

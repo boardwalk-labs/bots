@@ -112,7 +112,31 @@ await step.run("clone", async () => {
   await git(["checkout", "-b", branch]);
 });
 
-// ── Implement: the agent edits files in repo/ and makes the test command pass ────────────────────
+// ── Setup: install dependencies DETERMINISTICALLY before the agent runs ──────────────────────────
+// The trusted program prepares a ready workspace; the agent does the creative work. This is why the
+// test command (a typecheck/test) can resolve imports without the planner having to remember an
+// install step. Installs every package.json in the repo (this repo uses per-package deps).
+phase("Setup");
+const setup = await step.run("install-deps", async () => {
+  const found = await run("bash", [
+    "-lc",
+    `cd ${DIR} && find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*'`,
+  ]);
+  const pkgDirs = found.stdout
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((p) => p.replace(/\/?package\.json$/, "") || ".");
+  for (const d of pkgDirs) {
+    await run("bash", ["-lc", `cd ${DIR}/${d} && npm install --no-audit --no-fund --loglevel=error`], {
+      timeout: 10 * 60 * 1000,
+    });
+  }
+  return { packages: pkgDirs };
+});
+console.log(`code-factory-build: installed deps in ${String(setup.packages.length)} package(s)`);
+
+// ── Implement: the agent edits files in the ready checkout ───────────────────────────────────────
 phase("Implement");
 const revisionNote = feedback !== undefined
   ? `\n\nThis is a REVISION. Your previous attempt was reviewed and needs changes.\nReviewer / requester feedback:\n${feedback}\n\nYour previous diff (for reference; you are starting from a clean base, so re-apply what was good and fix the rest):\n${(prior_diff ?? "").slice(0, 12_000)}`
