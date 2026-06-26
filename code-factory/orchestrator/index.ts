@@ -36,7 +36,8 @@ export const meta = {
       issue: { type: "object" },
     },
   },
-  permissions: { secrets: [{ name: "GITHUB_APP_ID" }, { name: "GITHUB_APP_PRIVATE_KEY" }] },
+  // GITHUB_APP_ID is a non-secret environment variable; only the private key is a secret.
+  permissions: { secrets: [{ name: "GITHUB_APP_PRIVATE_KEY" }] },
   // The orchestrator itself spends almost nothing (no agent() calls); the workers carry the real
   // caps. deadline_seconds is wall-clock and INCLUDES the human wait, so give the gate room: if no
   // one responds within 7 days the run fails on the deadline rather than hanging forever.

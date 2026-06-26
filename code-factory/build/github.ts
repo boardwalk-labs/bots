@@ -32,7 +32,12 @@ export async function gh(path: string, token: string, init?: RequestInit): Promi
 // hour), so mint it fresh right before you need it rather than memoizing it; that way a run that
 // suspends (a human gate) and resumes hours later never replays an expired token.
 export async function installationToken(repo: string): Promise<string> {
-  const appId = await secrets.get("GITHUB_APP_ID");
+  // GITHUB_APP_ID is a non-secret environment variable (injected from the run's environment, e.g.
+  // "open-source"); only the private key is a secret.
+  const appId = process.env.GITHUB_APP_ID;
+  if (appId === undefined || appId === "") {
+    throw new Error("GITHUB_APP_ID is not set — expected as an environment variable (e.g. in the 'open-source' environment).");
+  }
   const pem = (await secrets.get("GITHUB_APP_PRIVATE_KEY")).replace(/\\n/g, "\n");
   const jwt = appJwt(appId, pem);
   const install = (await gh(`/repos/${repo}/installation`, jwt)) as { id: number };

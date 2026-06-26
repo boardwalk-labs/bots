@@ -39,7 +39,8 @@ export const meta = {
     },
     required: ["repo", "base", "branch", "plan", "issue"],
   },
-  permissions: { secrets: [{ name: "GITHUB_APP_ID" }, { name: "GITHUB_APP_PRIVATE_KEY" }] },
+  // GITHUB_APP_ID is a non-secret environment variable; only the private key is a secret.
+  permissions: { secrets: [{ name: "GITHUB_APP_PRIVATE_KEY" }] },
   // A coding run can legitimately take a while; cap active compute and dollars, not wall-clock.
   budget: { max_usd: 6, max_duration_seconds: 1800 },
 } satisfies WorkflowMeta;

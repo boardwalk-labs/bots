@@ -62,10 +62,11 @@ from the App's id + private key; the secret never reaches an agent (see `orchest
    - Subscribe to events: Issues.
    - Webhook: leave the URL as a placeholder for now; you will set it after deploying.
 2. **Generate a private key** on the App's page and download the `.pem`.
-3. **Store the secrets** in Boardwalk (dashboard for hosted, or `.env` per package for `boardwalk
-   dev`, see [`.env.example`](./.env.example)):
-   - `GITHUB_APP_ID` (the App's numeric ID)
-   - `GITHUB_APP_PRIVATE_KEY` (the PEM)
+3. **Store the credentials** in Boardwalk. They live in an environment (e.g. `open-source`); a run
+   selects it with `--environment open-source` (the default is the org base). See
+   [`.env.example`](./.env.example) for the local `boardwalk dev` equivalents.
+   - `GITHUB_APP_ID` is a non-secret variable: `boardwalk variables set GITHUB_APP_ID <id> --environment open-source`
+   - `GITHUB_APP_PRIVATE_KEY` is a secret: `boardwalk secrets set GITHUB_APP_PRIVATE_KEY --environment open-source`
 4. **Install the App** on the repositories you want the factory to work on.
 
 ### Webhook auth, honestly
