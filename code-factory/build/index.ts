@@ -135,10 +135,11 @@ Implementation plan:
 Steps:
 1. Read the relevant files first; match the codebase's existing style and conventions.
 2. Make the change. Keep it minimal and focused on the issue. Do NOT refactor unrelated code.
-3. Add or update tests so the change is actually covered.
-4. Run \`${plan.test_command}\` (cd into ./${AGENT_DIR} first) and iterate until it passes, or until you
-   are confident the remaining failures are pre-existing and unrelated to your change.
-Do not run git, push, or any network/auth commands; the surrounding program handles version control.`,
+3. If the package already has a test setup, add or update a test that covers the change.
+Do NOT run the test command, package installs, or any build yourself — the surrounding program runs
+\`${plan.test_command}\` after you finish, and version control is handled for you. Keep your tool use
+focused: read only what you need, make the edit, then stop (you have a limited tool budget). Do not
+run git, push, or any network/auth commands.`,
   { builtins: "all", reasoning: "high" },
 );
 
