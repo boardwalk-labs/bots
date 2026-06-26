@@ -40,7 +40,7 @@ export const meta = {
   // The orchestrator itself spends almost nothing (no agent() calls); the workers carry the real
   // caps. deadline_seconds is wall-clock and INCLUDES the human wait, so give the gate room: if no
   // one responds within 7 days the run fails on the deadline rather than hanging forever.
-  budget: { max_usd: 0.25, deadline_seconds: 7 * 24 * 60 * 60 },
+  budget: { max_usd: 0.25, deadline_seconds: 604800 }, // 7 days (literal: meta allows no expressions)
 } satisfies WorkflowMeta;
 
 const MAX_AUTO_REVISIONS = 2; // skeptical-reviewer rounds before a human ever sees it
