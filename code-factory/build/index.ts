@@ -19,7 +19,7 @@ import { promisify } from "node:util";
 import { phase, agent, input, output, step, type WorkflowMeta } from "@boardwalk-labs/workflow";
 import { installationToken } from "./github.js";
 
-const run = promisify(execFile);
+const execFileAsync = promisify(execFile);
 
 export const meta = {
   slug: "code-factory-build",
@@ -59,10 +59,44 @@ const { repo, base, branch, plan, issue, prior_diff, feedback } = input as Build
 const token = await installationToken(repo);
 const authUrl = `https://x-access-token:${token}@github.com/${repo}.git`;
 const cleanUrl = `https://github.com/${repo}.git`;
-const DIR = "repo";
+// Clone into the run's writable workspace (the program's own cwd is read-only). The agent's tools are
+// rooted at the same workspace, so it sees the checkout as ./repo (AGENT_DIR).
+const WORKSPACE = process.env.WORKSPACE_ROOT ?? "/workspace";
+const DIR = `${WORKSPACE}/repo`;
+const AGENT_DIR = "repo";
 
-async function git(args: string[]): Promise<string> {
-  const { stdout } = await run("git", ["-C", DIR, ...args], { maxBuffer: 32 * 1024 * 1024 });
+// The install token is minted at runtime (not a registered secret), so engine redaction won't catch
+// it — scrub it from any exec output so it can never reach the run's error / logs.
+function redactToken(s: string): string {
+  return token.length === 0 ? s : s.split(token).join("x-access-token:***");
+}
+
+interface ExecOut {
+  stdout: string;
+  stderr: string;
+}
+async function run(
+  file: string,
+  args: readonly string[],
+  opts: { maxBuffer?: number; timeout?: number } = {},
+): Promise<ExecOut> {
+  try {
+    const { stdout, stderr } = await execFileAsync(file, [...args], {
+      maxBuffer: 32 * 1024 * 1024,
+      ...opts,
+    });
+    return { stdout: String(stdout), stderr: String(stderr) };
+  } catch (err) {
+    const e = err as { message?: string; stdout?: string | Buffer; stderr?: string | Buffer };
+    throw Object.assign(new Error(redactToken(e.message ?? "command failed")), {
+      stdout: redactToken(String(e.stdout ?? "")),
+      stderr: redactToken(String(e.stderr ?? "")),
+    });
+  }
+}
+
+async function git(args: readonly string[]): Promise<string> {
+  const { stdout } = await run("git", ["-C", DIR, ...args]);
   return stdout;
 }
 
@@ -85,8 +119,8 @@ const revisionNote = feedback !== undefined
   : "";
 
 await agent(
-  `You are implementing a change in a git checkout located in the ./${DIR} directory. Operate ONLY
-inside ./${DIR}.
+  `You are implementing a change in a git checkout located in the ./${AGENT_DIR} directory. Operate
+ONLY inside ./${AGENT_DIR}.
 
 Issue: ${issue.title}
 ${issue.body}
@@ -102,7 +136,7 @@ Steps:
 1. Read the relevant files first; match the codebase's existing style and conventions.
 2. Make the change. Keep it minimal and focused on the issue. Do NOT refactor unrelated code.
 3. Add or update tests so the change is actually covered.
-4. Run \`${plan.test_command}\` (cd into ./${DIR} first) and iterate until it passes, or until you
+4. Run \`${plan.test_command}\` (cd into ./${AGENT_DIR} first) and iterate until it passes, or until you
    are confident the remaining failures are pre-existing and unrelated to your change.
 Do not run git, push, or any network/auth commands; the surrounding program handles version control.`,
   { builtins: "all", reasoning: "high" },
