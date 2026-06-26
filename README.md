@@ -23,6 +23,17 @@ delivery and routes it to the workflow that handles it (issues to `code-factory`
 `pr-review`) via `workflows.run`. Adding a GitHub bot is one new entry in its `ROUTES`. Point the App
 at the dispatcher's webhook URL, not at any individual bot.
 
+**Setup checklist** (one GitHub App for every GitHub bot):
+
+1. Create the App from [`code-factory/app-manifest.json`](./code-factory/app-manifest.json).
+2. Permissions: Contents, Issues, Pull requests (read/write); Metadata (read).
+3. Subscribe to events: **Issues** and **Pull requests**.
+4. Store credentials in the org **base** environment (webhook runs use the base): `GITHUB_APP_ID` as a
+   variable, `GITHUB_APP_PRIVATE_KEY` as a secret (`boardwalk secrets set ... --from-file key.pem`).
+5. Deploy the workflows, then point the App's webhook at the `github-dispatcher` URL
+   (`boardwalk webhook github-dispatcher --rotate`).
+6. Install the App on the repositories you want the bots to act on.
+
 ## How a bot is laid out
 
 A bot is a folder. Inside it, each workflow is a self-contained, separately deployable package (its
