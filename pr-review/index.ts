@@ -12,6 +12,7 @@
 
 import { phase, agent, input, output, step, type WorkflowMeta } from "@boardwalk-labs/workflow";
 import { gh, installationToken } from "./github.js";
+import { reviewBody, type Review } from "./review-body.js";
 
 export const meta = {
   slug: "pr-review",
@@ -72,12 +73,6 @@ const REVIEW_SCHEMA = {
   required: ["verdict", "summary", "findings"],
 } as const;
 
-interface Review {
-  verdict: "approve" | "request_changes";
-  summary: string;
-  findings: { severity: "blocker" | "major" | "minor"; file: string; note: string }[];
-}
-
 console.log(`pr-review: reviewing ${repo}#${String(prNumber)} (action=${ev.action ?? "manual"})`);
 const token = await installationToken(repo);
 
@@ -135,7 +130,7 @@ phase("Post");
 await step.run("post-review", () =>
   gh(`/repos/${repo}/pulls/${String(prNumber)}/reviews`, token, {
     method: "POST",
-    body: JSON.stringify({ event: EVENT, body: reviewBody(review) }),
+    body: JSON.stringify({ event: EVENT, body: reviewBody(review, pr.fileCount) }),
   }),
 );
 console.log(`pr-review: posted ${EVENT} review on ${repo}#${String(prNumber)}`);
@@ -148,19 +143,3 @@ output({
   files_reviewed: pr.fileCount,
   posted_as: EVENT,
 });
-
-function reviewBody(r: Review): string {
-  const findings = r.findings.length === 0
-    ? "_No findings._"
-    : r.findings.map((f) => `- **${f.severity}** \`${f.file}\`: ${f.note}`).join("\n");
-  return [
-    `### Automated review: ${r.verdict === "approve" ? "looks good" : "changes suggested"}`,
-    ``,
-    r.summary,
-    ``,
-    `**Findings**`,
-    findings,
-    ``,
-    `_Posted by the Boardwalk PR reviewer (non-blocking)._`,
-  ].join("\n");
-}
