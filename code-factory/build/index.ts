@@ -15,6 +15,7 @@
 // avoids fragile "fetch the half-finished branch" logic.
 
 import { execFile } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { phase, agent, input, output, step, type WorkflowMeta } from "@boardwalk-labs/workflow";
 import { installationToken } from "./github.js";
@@ -112,6 +113,26 @@ await step.run("clone", async () => {
   await git(["checkout", "-b", branch]);
 });
 
+// ── Revision: re-apply the previous attempt so the agent FIXES it incrementally instead of
+// re-implementing from scratch (the real token saver). Falls back to a from-scratch re-implement if
+// the patch doesn't apply cleanly.
+let priorApplied = false;
+if (feedback !== undefined && prior_diff !== undefined && prior_diff.trim() !== "") {
+  priorApplied = await step.run("apply-prior", async () => {
+    const patchPath = `${WORKSPACE}/code-factory-prior.patch`;
+    writeFileSync(patchPath, prior_diff ?? "");
+    try {
+      await git(["apply", "--whitespace=nowarn", patchPath]);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  console.log(
+    `code-factory-build: prior change ${priorApplied ? "re-applied (incremental fix)" : "did not apply; re-implementing"}`,
+  );
+}
+
 // ── Setup: install dependencies DETERMINISTICALLY before the agent runs ──────────────────────────
 // The trusted program prepares a ready workspace; the agent does the creative work. This is why the
 // test command (a typecheck/test) can resolve imports without the planner having to remember an
@@ -143,9 +164,12 @@ console.log(`code-factory-build: installed deps in ${String(setup.packages.lengt
 
 // ── Implement: the agent edits files in the ready checkout ───────────────────────────────────────
 phase("Implement");
-const revisionNote = feedback !== undefined
-  ? `\n\nThis is a REVISION. Your previous attempt was reviewed and needs changes.\nReviewer / requester feedback:\n${feedback}\n\nYour previous diff (for reference; you are starting from a clean base, so re-apply what was good and fix the rest):\n${(prior_diff ?? "").slice(0, 12_000)}`
-  : "";
+const revisionNote =
+  feedback === undefined
+    ? ""
+    : priorApplied
+      ? `\n\nThis is a REVISION. Your previous change is ALREADY APPLIED to the working tree — read the current files to see it. The reviewer asked for these changes:\n${feedback}\n\nMake ONLY the targeted fixes the feedback calls for. Do not redo the rest of the change.`
+      : `\n\nThis is a REVISION. Re-implement the change, addressing this feedback:\n${feedback}\n\nYour previous diff (for reference):\n${(prior_diff ?? "").slice(0, 12_000)}`;
 
 await agent(
   `You are implementing a change in a git checkout located in the ./${AGENT_DIR} directory. Operate

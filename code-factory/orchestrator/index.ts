@@ -46,7 +46,7 @@ export const meta = {
   budget: { max_usd: 0.25, deadline_seconds: 604800 }, // 7 days (literal: meta allows no expressions)
 } satisfies WorkflowMeta;
 
-const MAX_AUTO_REVISIONS = 1; // auto rebuild+review rounds before the human gate (build is costly)
+const MAX_AUTO_REVISIONS = 2; // auto rebuild+review rounds before the human gate (revisions are incremental + cheap)
 const MAX_HUMAN_REVISIONS = 3; // "request changes" rounds a person may ask for
 
 // ── Resolve the trigger into { repo, issueNumber, base } from either shape ──────────────────────
